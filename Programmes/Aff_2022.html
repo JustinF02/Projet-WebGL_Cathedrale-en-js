@@ -1,0 +1,364 @@
+<html>
+	<head>
+		<title>Transept de la cathédrale d'Amiens</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	</head>
+
+	<body>
+		<script type="importmap">
+			{
+				"imports": {"three": "../Libs/three.module.js"}
+			}
+		</script>
+		<script type="module">
+            import * as THREE from 'three';
+            import { OBJLoader } from '../Libs/OBJLoader.js';
+			var container; 
+			var axisX = new THREE.Vector3(1, 0, 0).normalize();
+
+			//Booléens qui servent de flag lorsqu'une touche est préssée
+			var avance, recule, vaGauche, vaDroite, rotAvant, rotArr, rotGauche, rotDroite, rotOnAxisLeft, rotOnAxisRight;
+			var boolMusique = false;
+
+			//Constantes de vitesse de déplacement
+			const vitesseDeplacement = 0.1;
+			const vitesseRotationUpDown = 0.02;
+			const vitesseRotation = 0.03;
+
+			var camera, cameraHint, scene, rendu, lampe, lampeHINT;
+
+			//Booléen pour savoir lorsque la caméra d'indice
+			var boolCameraToHint = false;
+			var PriestAsBeenSeen = false;
+			var SaberHasBeenFound = false;
+			
+			var meshFINISH, meshHINT, meshAUTEL;
+			var texteHINT, texteFINISH, texteAUTEL;
+
+			//Constantes des valeurs à ne pas dépasser (murs de la cathédrale)
+			const hauteurJoueur = -20;
+			const MurGauche = -5;
+			const MurDroite = 5;
+			const MurFace = -11;
+			const MurDerriere = 11;
+			const SolKTD = -20;
+			const PlafondKTD = 20;
+			//Contraintes de rotation de la caméra
+			const rotMaxUp = 2.14;
+			const rotMaxDown = 0.60;
+			//Constantes d'intervalle aux indices
+			const distanceToHint = 2;
+
+			//audio
+			var audio = new Audio('./musiqueCathedrale.mp3');
+			audio.volume = 0.20;			
+
+			//Fonction onWindowsResize -> créer la fenêtre du jeu par rapport à la taille de la page.
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                rendu.setSize( window.innerWidth, window.innerHeight );
+			}
+
+			//Fonction Init -> initialisation du jeu
+			function Init() {
+				container = document.createElement( 'div' );
+				document.body.appendChild( container );
+
+				//Initialisation de la caméra principale
+				camera = new THREE.PerspectiveCamera(100, window.innerWidth / window.innerHeight, 0.1, 100 );
+                camera.rotation.x=Math.PI/2;
+                camera.rotation.y=0;
+				camera.rotation.z=0;
+				
+				camera.position.x=0;
+				camera.position.y=0;
+                camera.position.z=-21;
+
+				//Initialisation de la caméra d'indice.
+				cameraHint = new THREE.PerspectiveCamera(100, window.innerWidth / window.innerHeight, 0.1, 100 );
+				cameraHint.position.x = 0;
+				cameraHint.position.y = -8;
+				cameraHint.position.z = -18;
+				cameraHint.rotation.x = -1.5;
+				cameraHint.rotation.y = 0;
+				cameraHint.rotation.z = -Math.PI;
+
+				//Scene
+				scene = new THREE.Scene();
+
+				//var ambient = new THREE.AmbientLight( 0xffffff );
+				//scene.add( ambient );
+
+				var manager = new THREE.LoadingManager();
+				manager.onProgress = function ( item, loaded, total ) {
+					console.log( item, loaded, total );
+				};
+
+				//Initialisation de la lampe ambiante dans la cathédrale
+				var ambient = new THREE.AmbientLight( 0x6b6b6b, .3);
+                	scene.add( ambient );
+
+				//Initialisation de la lampe du joueur
+				lampe = new THREE.PointLight(0xcf7c34, 5, 5, 1.5);
+					lampe.position.set(camera.position.x, camera.position.y, camera.position.z);
+					lampe.castShadow = true;
+					lampe.distance = 10;
+					scene.add(lampe);
+
+				//Initialisation de la lampe de l'indice
+				lampeHINT = new THREE.PointLight(0xcf7c34, 5, 5, 1.5);
+					lampeHINT.position.set(0, -8, -18);
+					lampeHINT.castShadow = true;
+					lampeHINT.distance = 8;
+
+				//Textures :
+				var texture = new THREE.Texture();
+				var tempo = new THREE.ImageLoader( manager );
+				tempo.load( '../TranseptSud/TranseptTexture4096.jpg', function ( image ) {
+					texture.image = image;
+					texture.needsUpdate = true;
+				} );
+               
+				//Cubes de quêtes
+				var GCube = new THREE.BoxGeometry(0.5, 0.5, 0.5); //Taille du cube
+				//Caractéristiques du cube
+				var MCube = new THREE.MeshPhongMaterial({color: 0xC25E00, shininess: 50,opacity:0.40, transparent:true});
+				
+				//Un mesh va permettre d'allier les caractéristiques du cube et de le placer sur le jeu
+				meshFINISH = new THREE.Mesh(GCube, MCube);
+				meshFINISH.position.x=0;
+				meshFINISH.position.y=11.5;
+				meshFINISH.position.z=-21;
+				//scene.add( meshFINISH );
+
+				meshHINT = new THREE.Mesh(GCube, MCube);
+				meshHINT.position.x = 6;
+				meshHINT.position.y =-1.7;
+				meshHINT.position.z = -21;
+				scene.add( meshHINT );
+
+				meshAUTEL = new THREE.Mesh(GCube, MCube);
+				meshAUTEL.position.x=0;
+				meshAUTEL.position.y=-11.5;
+				meshAUTEL.position.z= -21;
+
+				//Textes et caractéristiques
+				texteHINT = document.createElement('div');
+				texteHINT.style.position = 'absolute';
+				texteHINT.style.backgroundColor = "#00000099"; //Fond noir
+				texteHINT.innerHTML = "<br/><b>Maître Jedi</b><br/><br/>Bonjour à toi futur chevalier jedi !<br/> Trouve ton sabre laser sur l'autel ! <br/> Utilise la touche 'w' pour t'aider."; //Texte
+				texteHINT.style.top = "35%";//Rapport à la taille de la fenêtre
+				texteHINT.style.bottom = "35%";
+				texteHINT.style.right = "35%";
+				texteHINT.style.left = "35%";
+				texteHINT.style.textAlign = "center";
+				texteHINT.style.fontSize = 30 + "px";
+				texteHINT.style.color = "yellow";
+				document.body.appendChild(texteHINT);
+
+				texteFINISH = document.createElement('div');
+				texteFINISH.style.position = 'absolute';
+				texteFINISH.style.backgroundColor = "#00000099";
+				texteFINISH.innerHTML = "<br/><b>Sortie</b><br/><br/>Vous avez trouvé la sortie <br/><br/>Servez les peuples au nom de l'ordre-jedi !";
+				texteFINISH.style.top = "35%";
+				texteFINISH.style.bottom = "35%";
+				texteFINISH.style.right = "35%";
+				texteFINISH.style.left = "35%";
+				texteFINISH.style.textAlign = "center";
+				texteFINISH.style.fontSize = 30 + "px";
+				texteFINISH.style.color = "yellow";
+				document.body.appendChild(texteFINISH);
+
+				texteAUTEL = document.createElement('div');
+				texteAUTEL.style.position = 'absolute';
+				texteAUTEL.style.backgroundColor = "#00000099";
+				texteAUTEL.innerHTML = "<br/><b>Autel</b><br/><br/>Vous avez trouvé votre sabre-laser !<br/><img src='./sabrelaser.png'";
+				texteAUTEL.style.top = "35%";
+				texteAUTEL.style.bottom = "35%";
+				texteAUTEL.style.right = "35%";
+				texteAUTEL.style.left = "35%";
+				texteAUTEL.style.textAlign = "center";
+				texteAUTEL.style.fontSize = 30 + "px";
+				texteAUTEL.style.color = "yellow";
+				document.body.appendChild(texteAUTEL);
+				
+				//Chargement du modèle
+				var tempo = new OBJLoader( manager );
+				tempo.load( '../TranseptSud/transeptSudBox.obj', function (object) {
+					object.traverse( function ( child ) {
+						if ( child instanceof THREE.Mesh ) {
+							child.material.map = texture;
+						}
+					} );
+					scene.add( object );
+				} );
+
+            	rendu = new THREE.WebGLRenderer();
+              	rendu.setSize( window.innerWidth, window.innerHeight );
+              	container.appendChild( rendu.domElement );
+              	window.addEventListener( 'resize', onWindowResize, false );
+				
+				//EventListeners pour toutes les touches du jeu
+				//Levée des flags pour les touches de déplacement Z Q S D A E
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 90) avance = true; boolMusique = true;}, false);
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 83) recule = true;}, false);
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 81) vaGauche = true;}, false);
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 68) vaDroite = true;}, false);
+				//window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 65) rotOnAxisLeft = true;}, false);
+				//window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 69) rotOnAxisRight = true;}, false);
+
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 90) avance = false;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 83) recule = false;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 81) vaGauche = false;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 68) vaDroite = false;}, false);
+				//window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 65) rotOnAxisLeft = false;}, false);
+				//window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 69) rotOnAxisRight = false;}, false);
+
+				//Baisse des flags pour les touches de rotation caméra Arrows Left, Right, Up, Down.
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 38) rotAvant = true;}, false);
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 40) rotArr = true;}, false);
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 37) rotGauche = true;}, false);
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 39) rotDroite = true;}, false);
+
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 38) rotAvant = false;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 40) rotArr = false;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 37) rotGauche = false;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 39) rotDroite = false;}, false);
+
+				//Variation du flag pour la touche d'indice.
+				window.addEventListener( 'keydown', function(ev) {if (ev.keyCode == 87) boolCameraToHint = true;}, false);
+				window.addEventListener( 'keyup', function(ev) {if (ev.keyCode == 87) boolCameraToHint = false;}, false);
+					
+				
+			}
+			function Afficher() {
+				if(boolCameraToHint){
+					//Touche 'w' préssée, affichage par la caméra de l'indice
+					//Lampe du joueur éteinte et lampe de l'indice allumée
+					scene.remove(lampe);
+					scene.add(lampeHINT);
+					rendu.render(scene,cameraHint);
+				}else{
+					//Retour à l'initial
+					scene.remove(lampeHINT);
+					scene.add(lampe);
+					rendu.render(scene,camera);
+				}
+                
+			}
+			function Animer() {
+				
+				//boolMusique est un flag qui se lève lorsque l'utilisateur se met à avancer.
+				if(boolMusique){
+					//L'audio se joue
+					audio.play();
+					//Lorsqu'il s'arrête, un Event 'ended' le relance
+					audio.addEventListener('ended',function(){
+						audio.src = './musiqueCathedrale.mp3';
+						audio.volume = 0.20; //%
+						audio.pause();
+						audio.load();
+						audio.play();
+					});
+				}
+				requestAnimationFrame(Animer);
+
+				//Si le flag de l'indice est levé, les déplacements du joueur sont bloqués.
+				meshHINT.rotateOnWorldAxis(new THREE.Vector3(0,0,1), vitesseRotationUpDown);
+				meshAUTEL.rotateOnWorldAxis(new THREE.Vector3(0,0,1), vitesseRotationUpDown);
+				meshFINISH.rotateOnWorldAxis(new THREE.Vector3(0,0,1), vitesseRotationUpDown);
+				if(boolCameraToHint == false){
+					//Translate permet de translater sur un axe
+					if(avance){camera.translateZ(-vitesseDeplacement);}
+					if(recule){camera.translateZ(vitesseDeplacement);}
+					if(vaGauche){camera.translateX(-vitesseDeplacement);}
+					if(vaDroite){camera.translateX(vitesseDeplacement);}
+					//RotateOnAxis permet de tourner sur un axe.
+					if(rotOnAxisLeft ){camera.rotateOnAxis(new THREE.Vector3(0,0,1), vitesseRotation);}
+					if(rotOnAxisRight){camera.rotateOnAxis(new THREE.Vector3(0,0,-1), vitesseRotation);}
+
+					if(rotAvant) {camera.rotateOnAxis(new THREE.Vector3(1,0,0), vitesseRotationUpDown);}
+					if(rotArr)   {camera.rotateOnAxis(new THREE.Vector3(-1,0,0), vitesseRotationUpDown);}
+					//RotateOnWorldAxis permet de tourner sur l'axe de la scene.
+					if(rotGauche){camera.rotateOnWorldAxis(new THREE.Vector3(0,0,1), vitesseRotation);}
+					if(rotDroite){camera.rotateOnWorldAxis(new THREE.Vector3(0,0,-1), vitesseRotation);}
+					
+					//La lampe se déplace avec la caméra
+					lampe.position.copy(camera.position)
+
+					//Contraintes de déplacement pour ne pas sortir des murs
+					if (camera.position.x < MurGauche) {
+						camera.position.x = MurGauche;
+					}
+					if (camera.position.x > MurDroite) {
+						camera.position.x = MurDroite;
+					}
+					if (camera.position.y < MurFace) {
+						camera.position.y = MurFace;
+					}
+					if (camera.position.y > MurDerriere) {
+						camera.position.y = MurDerriere;
+					}
+					if (camera.position.z < SolKTD) {
+						camera.position.z = SolKTD;
+					}
+					if (camera.position.z > PlafondKTD) {
+						camera.position.z = PlafondKTD;
+					}
+					if(camera.position.z >= hauteurJoueur){
+						camera.position.z = hauteurJoueur;
+					}
+					// if(camera.rotation.x >= rotMaxUp){
+					// 	camera.rotation.x = rotMaxUp;
+					// }
+					// if(camera.rotation.x <= rotMaxDown){
+					// 	camera.rotation.x = rotMaxDown;
+					// }
+
+
+					//Affichage des Indices
+					//Si la caméra est proche de l'indice
+					if(camera.position.distanceTo(meshHINT.position)<=distanceToHint){
+						//Le cube d'indice disparaît
+						scene.remove(meshHINT);
+						//Le texte d'indice apparaît
+						texteHINT.style.display = "block";
+						PriestAsBeenSeen = true;
+						//Ajout de l'indice de l'autel
+						scene.add(meshAUTEL);
+					}else{
+						texteHINT.style.display = "none";
+					}					
+
+					//Si le joueur s'approche de l'autel
+					if(camera.position.distanceTo(meshAUTEL.position)<=distanceToHint && PriestAsBeenSeen){
+						console.log(camera.position, camera.rotation);
+						scene.remove(meshAUTEL);
+						texteAUTEL.style.display = "block";
+						SaberHasBeenFound = true;
+						//Ajout de l'indice de fin de quête
+						scene.add(meshFINISH);
+					}else{
+						texteAUTEL.style.display = "none";
+					}
+
+					//Si le joueur s'approche de la porte
+					if(camera.position.distanceTo(meshFINISH.position)<=distanceToHint && SaberHasBeenFound){
+						//Le cube disparaît
+						scene.remove(meshFINISH);
+						//Le texte apparaît
+						texteFINISH.style.display = "block";
+					}else{
+						//Le texte disparaît
+						texteFINISH.style.display = "none";
+					}
+				}						
+				Afficher();
+			}
+           Init();
+           Animer();
+		</script>
+	</body>
+</html>
